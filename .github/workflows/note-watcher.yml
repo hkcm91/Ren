@@ -1,0 +1,44 @@
+name: Note Watcher
+
+on:
+  push:
+    paths:
+      - 'notes/**'
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Find new or changed notes
+        id: changes
+        run: |
+          CHANGED=$(git diff --name-only HEAD~1 HEAD -- notes/ | grep -v HOW-TO-WRITE.md || true)
+          echo "files=$CHANGED" >> $GITHUB_OUTPUT
+          if [ -n "$CHANGED" ]; then
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create notification issue
+        if: steps.changes.outputs.has_changes == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const files = `${{ steps.changes.outputs.files }}`;
+            const fileList = files.split(
+).filter(f => f.trim()).map(f => `- ${f}`).join(
+);
+            
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `New note detected`,
+              body: `A note was added or updated in the repo:\n\n${fileList}\n\nCheck the notes/ folder for new messages.\n\n— Note Watcher (automated)`,
+              labels: [note-notification]
+            });
